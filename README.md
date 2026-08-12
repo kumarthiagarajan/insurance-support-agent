@@ -1,5 +1,7 @@
 # Insurance Support Agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Multi-agent insurance customer support system: a Supervisor agent (LangGraph) routes
 each query to a Policy, Billing, Claims, or General Help specialist, or escalates to a
 human. Specialists ground their answers in real customer data (SQLite) or a knowledge
