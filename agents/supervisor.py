@@ -61,10 +61,22 @@ def supervisor_node(state: AgentState) -> dict:
     if iterations >= MAX_ITERATIONS:
         return {"next": "escalate", "iterations": iterations + 1}
 
+    handled = state.get("handled", [])
     decision = _chain.invoke(
         {
             "messages": state["messages"],
-            "handled": ", ".join(state.get("handled", [])) or "none",
+            "handled": ", ".join(handled) or "none",
         }
     )
-    return {"next": decision.next, "iterations": iterations + 1}
+    next_node = decision.next
+
+    # Deterministic guardrail: never let a specialist's own reply escalate the
+    # customer to a human within the same turn -- the customer must see that
+    # reply and explicitly confirm (a fresh turn, with `handled` reset) before
+    # a specialist's recommendation to escalate can be acted on. Relying on
+    # the LLM alone to hold off is unreliable, since it sometimes escalates
+    # immediately regardless of prompt instructions.
+    if next_node == "escalate" and handled:
+        next_node = "FINISH"
+
+    return {"next": next_node, "iterations": iterations + 1}
