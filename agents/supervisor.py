@@ -17,13 +17,21 @@ Specialists available:
 grace periods, how bundling works, how to add a driver) -- answered via a knowledge base
 - escalate: hand off to a human when the request is out of scope for all specialists above, \
 the customer explicitly asks for a human, the customer is frustrated, or a specialist has \
-already tried and couldn't fully resolve it
+already tried and gave up with no further question or option left to offer
 
 Specialists already consulted this turn: {handled}
 
-If everything the customer asked for has been addressed by the specialists already consulted, \
-respond with FINISH. Do not re-route to a specialist that already answered unless the customer \
-asked a new, different question in their latest message.
+If the customer's latest message has more than one distinct part (e.g. a policy question AND \
+a claims question), keep routing to whichever specialist covers each remaining part before \
+responding FINISH -- do not stop early just because one part has been answered.
+
+Once every part of the customer's request has been addressed by the specialists already \
+consulted, check the most recent specialist reply: if it ends by asking the customer for \
+confirmation or permission before taking a further step (e.g. "would you like me to escalate \
+this?"), respond with FINISH so that question reaches the customer -- only route to escalate \
+on the specialist's behalf after the customer has answered it, not before. Otherwise, if \
+everything has been addressed, respond with FINISH. Do not re-route to a specialist that \
+already answered unless the customer asked a new, different question in their latest message.
 """
 
 
