@@ -1,8 +1,41 @@
+import datetime
 import sqlite3
 from pathlib import Path
 
+import openpyxl
+
 DB_PATH = Path(__file__).parent / "insurance.db"
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+SEED_XLSX_PATH = Path(__file__).parent / "Insurance_Support_Agent_Seed_Data.xlsx"
+
+# Maps each DB table to the workbook sheet that seeds it. Column order in each
+# sheet's header row must match that table's column order in schema.sql.
+TABLE_SHEETS = {
+    "customers": "Customers",
+    "policies": "Policies",
+    "billing": "Billing",
+    "claims": "Claims",
+}
+
+
+def _load_rows(wb, sheet_name, text_columns):
+    ws = wb[sheet_name]
+    rows = ws.iter_rows(values_only=True)
+    header = next(rows)
+    columns = [c for c in header if c is not None]
+    values = []
+    for row in rows:
+        if row[0] is None:
+            continue
+        cell_values = []
+        for column, value in zip(columns, row[: len(columns)]):
+            if isinstance(value, datetime.datetime):
+                value = value.date().isoformat()
+            elif isinstance(value, int) and column in text_columns:
+                value = str(value)
+            cell_values.append(value)
+        values.append(tuple(cell_values))
+    return columns, values
 
 
 def seed():
@@ -12,68 +45,23 @@ def seed():
         "DELETE FROM claims; DELETE FROM billing; DELETE FROM policies; DELETE FROM customers;"
     )
 
-    conn.executemany(
-        "INSERT INTO customers (customer_id, name, email, phone) VALUES (?, ?, ?, ?)",
-        [
-            ("CUST001", "Maria Gomez", "maria.gomez@example.com", "555-0101"),
-            ("CUST002", "James Chen", "james.chen@example.com", "555-0102"),
-        ],
-    )
-
-    conn.executemany(
-        """INSERT INTO policies
-           (policy_id, customer_id, policy_type, status, coverage_summary,
-            premium_monthly, start_date, renewal_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            (
-                "POL-AUTO-001", "CUST001", "auto", "active",
-                "Liability $100k/$300k, collision $500 deductible, comprehensive $250 deductible",
-                142.50, "2025-03-01", "2026-03-01",
-            ),
-            (
-                "POL-HOME-001", "CUST001", "home", "active",
-                "Dwelling $350,000, personal property $175,000, liability $300,000",
-                98.00, "2025-01-15", "2026-01-15",
-            ),
-            (
-                "POL-AUTO-002", "CUST002", "auto", "active",
-                "Liability $50k/$100k, collision $1000 deductible, comprehensive $500 deductible",
-                110.25, "2025-06-10", "2026-06-10",
-            ),
-        ],
-    )
-
-    conn.executemany(
-        """INSERT INTO billing
-           (invoice_id, customer_id, policy_id, amount_due, due_date, status, payment_method)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        [
-            ("INV-1001", "CUST001", "POL-AUTO-001", 142.50, "2026-08-01", "overdue",
-             "auto-pay (card ending 4321)"),
-            ("INV-1002", "CUST001", "POL-HOME-001", 98.00, "2026-08-15", "due",
-             "auto-pay (card ending 4321)"),
-            ("INV-1003", "CUST002", "POL-AUTO-002", 110.25, "2026-07-20", "paid",
-             "manual (bank transfer)"),
-        ],
-    )
-
-    conn.executemany(
-        """INSERT INTO claims
-           (claim_id, customer_id, policy_id, claim_type, status, filed_date,
-            description, adjuster_name)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            ("CLM-5001", "CUST001", "POL-AUTO-001", "collision", "under_review", "2026-08-01",
-             "Rear-end collision at intersection, minor bumper damage", "Alex Rivera"),
-            ("CLM-5002", "CUST002", "POL-AUTO-002", "comprehensive", "approved", "2026-07-10",
-             "Windshield crack from road debris", "Priya Nair"),
-        ],
-    )
+    wb = openpyxl.load_workbook(SEED_XLSX_PATH, data_only=True)
+    for table, sheet_name in TABLE_SHEETS.items():
+        text_columns = {
+            row[1]
+            for row in conn.execute(f"PRAGMA table_info({table})")
+            if row[2].upper() == "TEXT"
+        }
+        columns, values = _load_rows(wb, sheet_name, text_columns)
+        placeholders = ", ".join("?" for _ in columns)
+        conn.executemany(
+            f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+            values,
+        )
 
     conn.commit()
     conn.close()
-    print(f"Seeded database at {DB_PATH}")
+    print(f"Seeded database at {DB_PATH} from {SEED_XLSX_PATH.name}")
 
 
 if __name__ == "__main__":

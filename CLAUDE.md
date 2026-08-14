@@ -10,7 +10,7 @@ pip install -r requirements.txt
 
 # .env must define ANTHROPIC_API_KEY (there is no .env.example checked in)
 
-python db/seed_data.py     # (re)creates + seeds db/insurance.db from schema.sql
+python db/seed_data.py     # (re)creates db/insurance.db from schema.sql, seeds it from db/Insurance_Support_Agent_Seed_Data.xlsx
 python rag/ingest.py       # embeds FAQ docs into rag/chroma_store/ (ChromaDB)
 python main.py             # interactive CLI chat loop
 
@@ -24,7 +24,10 @@ conversations don't crash the Supervisor's routing call — run it after touchin
 `agents/supervisor.py`, `agents/utils.py`, or `graph.py`. `db/insurance.db` and
 `rag/chroma_store/` are gitignored, generated artifacts — regenerate them with the commands
 above rather than editing them by hand. Re-running `db/seed_data.py` wipes and reseeds all
-tables (`customers`, `policies`, `billing`, `claims`).
+tables (`customers`, `policies`, `billing`, `claims`) from `db/Insurance_Support_Agent_Seed_Data.xlsx`,
+which is checked into the repo and is the source of truth for seed data — edit the workbook
+(one sheet per table, header row must match that table's column order in `schema.sql`) rather
+than the generated `.db` file.
 
 ### Known gotcha: conversation must end on a user turn
 
