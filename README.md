@@ -48,7 +48,8 @@ cp .env.example .env
 
 python db/seed_data.py     # creates + seeds db/insurance.db
 python rag/ingest.py       # embeds FAQ docs into rag/chroma_store/
-python main.py
+python main.py             # interactive CLI chat loop
+streamlit run app.py       # or: web UI at http://localhost:8501
 ```
 
 Try customer IDs `CUST001` or `CUST002` (seeded with sample policies, billing, and
