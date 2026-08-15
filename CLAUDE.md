@@ -14,6 +14,7 @@ python db/seed_data.py     # (re)creates db/insurance.db from schema.sql, seeds 
 python rag/ingest.py       # embeds FAQ docs into rag/chroma_store/ (ChromaDB)
 python main.py             # interactive CLI chat loop
 streamlit run app.py       # web UI (chat interface), same graph as main.py
+python server.py           # FastAPI + static HTML/JS UI at http://127.0.0.1:8000
 
 python tests/test_conversation_flow.py   # regression check, see below
 ```
