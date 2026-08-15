@@ -51,6 +51,7 @@ python rag/ingest.py       # embeds FAQ docs into rag/chroma_store/
 python main.py             # interactive CLI chat loop
 streamlit run app.py       # or: Streamlit web UI at http://localhost:8501
 python server.py           # or: FastAPI + static HTML/JS UI at http://127.0.0.1:8000
+python gradio_app.py       # or: Gradio chat UI at http://127.0.0.1:7860
 ```
 
 Try customer IDs `CUST001` or `CUST002` (seeded with sample policies, billing, and
