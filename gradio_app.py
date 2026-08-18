@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from dotenv import load_dotenv
 
@@ -11,6 +12,7 @@ import gradio as gr
 from langchain_core.messages import HumanMessage
 
 from graph import build_graph
+from tracing import trace_config
 
 _graph = build_graph()
 
@@ -31,6 +33,7 @@ def start_session(customer_id):
         raise gr.Error("Customer ID is required.")
     return (
         new_state(customer_id),
+        str(uuid.uuid4()),
         [],
         gr.update(visible=False),
         gr.update(visible=True),
@@ -41,6 +44,7 @@ def start_session(customer_id):
 def switch_customer():
     return (
         None,
+        None,
         [],
         gr.update(visible=True),
         gr.update(visible=False),
@@ -48,7 +52,7 @@ def switch_customer():
     )
 
 
-def respond(message, history, state):
+def respond(message, history, state, session_id):
     message = (message or "").strip()
     if not message or state is None:
         return history, state, ""
@@ -57,7 +61,10 @@ def respond(message, history, state):
     state["messages"].append(HumanMessage(content=message))
     state["handled"] = []
     state["iterations"] = 0
-    state = _graph.invoke(state)
+    config = trace_config(
+        customer_id=state["customer_id"], session_id=session_id, feature="gradio"
+    )
+    state = _graph.invoke(state, config=config)
 
     history = history + [{"role": "user", "content": message}]
     for m in state["messages"][prev_len + 1 :]:
@@ -71,6 +78,7 @@ def respond(message, history, state):
 with gr.Blocks(title="Insurance Support Assistant") as demo:
     gr.Markdown("## 🛡️ Insurance Support Assistant")
     state = gr.State(None)
+    session_id_state = gr.State(None)
 
     with gr.Column(visible=True) as start_col:
         gr.Markdown("Enter a customer ID to start a conversation (try `CUST001` or `CUST002`).")
@@ -87,14 +95,15 @@ with gr.Blocks(title="Insurance Support Assistant") as demo:
             send_btn = gr.Button("Send", scale=1, variant="primary")
         switch_btn = gr.Button("Switch customer")
 
-    session_outputs = [state, chatbot, start_col, chat_col, customer_label]
+    session_outputs = [state, session_id_state, chatbot, start_col, chat_col, customer_label]
     start_btn.click(start_session, inputs=[customer_input], outputs=session_outputs)
     customer_input.submit(start_session, inputs=[customer_input], outputs=session_outputs)
     switch_btn.click(switch_customer, outputs=session_outputs)
 
     message_outputs = [chatbot, state, msg_input]
-    send_btn.click(respond, inputs=[msg_input, chatbot, state], outputs=message_outputs)
-    msg_input.submit(respond, inputs=[msg_input, chatbot, state], outputs=message_outputs)
+    respond_inputs = [msg_input, chatbot, state, session_id_state]
+    send_btn.click(respond, inputs=respond_inputs, outputs=message_outputs)
+    msg_input.submit(respond, inputs=respond_inputs, outputs=message_outputs)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import os
+import uuid
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -12,6 +13,7 @@ if not os.getenv("ANTHROPIC_API_KEY"):
 from langchain_core.messages import HumanMessage
 
 from graph import build_graph
+from tracing import trace_config
 
 st.set_page_config(page_title="Insurance Support Assistant", page_icon="🛡️")
 
@@ -53,6 +55,7 @@ if st.session_state.customer_id is None:
     if submitted and customer_id.strip():
         st.session_state.customer_id = customer_id.strip()
         st.session_state.state = new_state(st.session_state.customer_id)
+        st.session_state.session_id = str(uuid.uuid4())
         st.rerun()
     st.stop()
 
@@ -61,6 +64,7 @@ with st.sidebar:
     if st.button("Switch customer"):
         st.session_state.customer_id = None
         st.session_state.pop("state", None)
+        st.session_state.pop("session_id", None)
         st.rerun()
 
 for message in st.session_state.state["messages"]:
@@ -81,8 +85,13 @@ if user_input:
     with st.chat_message("user"):
         st.markdown(user_input)
 
+    config = trace_config(
+        customer_id=st.session_state.customer_id,
+        session_id=st.session_state.session_id,
+        feature="streamlit",
+    )
     with st.spinner("Thinking..."):
-        state = app.invoke(state)
+        state = app.invoke(state, config=config)
     st.session_state.state = state
 
     for message in state["messages"][prev_len + 1 :]:

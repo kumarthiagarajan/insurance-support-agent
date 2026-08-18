@@ -9,6 +9,9 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # .env must define ANTHROPIC_API_KEY (there is no .env.example checked in)
+# .env may optionally define LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL
+# for tracing (see tracing.py) -- without them, tracing.py's client stays disabled and the
+# app runs exactly as it does with it configured, just with no traces sent.
 
 python db/seed_data.py     # (re)creates db/insurance.db from schema.sql, seeds it from db/Insurance_Support_Agent_Seed_Data.xlsx
 python rag/ingest.py       # embeds FAQ docs into rag/chroma_store/ (ChromaDB)
@@ -82,11 +85,23 @@ rather than ending the turn, so the graph iterates until the Supervisor is satis
 - **`rag/ingest.py`** — owns the FAQ corpus (`FAQ_DOCS`, currently a hardcoded list) and
   `get_chroma_collection()`, which both `ingest.py` and `retriever.py` use. Embeddings run
   locally via ChromaDB's bundled MiniLM model (`DefaultEmbeddingFunction`) — Anthropic has no
-  embeddings endpoint, so `ANTHROPIC_API_KEY` is the only API key this project needs, and RAG
-  ingestion/retrieval works offline.
+  embeddings endpoint, so `ANTHROPIC_API_KEY` is the only *required* API key this project
+  needs, and RAG ingestion/retrieval works offline.
 - All LLM calls use `ChatAnthropic(model="claude-opus-5", thinking={"type": "disabled"})`,
   instantiated once per agent module at import time (`_llm` / `_llm | _router` module
   globals), not per-request.
+- **`tracing.py`** — optional Langfuse tracing (see [Langfuse LangChain/LangGraph
+  docs](https://langfuse.com/integrations/frameworks/langchain)). Builds a process-wide
+  `CallbackHandler` (with a `mask_otel_spans` hook that redacts emails/phones/card suffixes
+  before export) and a `trace_config(customer_id, session_id, feature)` helper that each of
+  the four entry points (`main.py`, `app.py`, `server.py`, `gradio_app.py`) passes as
+  `config=` to their `graph.invoke()` call, so one user turn = one trace, tagged by
+  `customer_id` (Langfuse `user_id`), a per-conversation `session_id` (groups a
+  conversation's turns in the Sessions view), and a `feature` tag identifying which UI
+  produced it (`cli`/`streamlit`/`fastapi`/`gradio`). Import `tracing` only after
+  `load_dotenv()` has run (Langfuse reads its env vars at client-construction time). With no
+  `LANGFUSE_*` env vars set, the client stays disabled and every call above is a no-op --
+  tracing never blocks or breaks the app.
 
 ### Adding a new specialist
 

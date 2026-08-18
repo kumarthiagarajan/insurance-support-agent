@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 from graph import build_graph
+from tracing import trace_config
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -84,7 +85,10 @@ def send_message(session_id: str, req: MessageRequest):
     state["handled"] = []
     state["iterations"] = 0
 
-    state = _graph.invoke(state)
+    config = trace_config(
+        customer_id=state["customer_id"], session_id=session_id, feature="fastapi"
+    )
+    state = _graph.invoke(state, config=config)
     _sessions[session_id] = state
 
     replies = [

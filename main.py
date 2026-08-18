@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from dotenv import load_dotenv
 
@@ -10,12 +11,14 @@ if not os.getenv("ANTHROPIC_API_KEY"):
 from langchain_core.messages import HumanMessage
 
 from graph import build_graph
+from tracing import trace_config
 
 
 def main():
     app = build_graph()
     print("Insurance Support Assistant (type 'quit' to exit)\n")
     customer_id = input("Customer ID (try CUST001, CUST002): ").strip() or "CUST001"
+    session_id = str(uuid.uuid4())
 
     state = {
         "messages": [],
@@ -35,7 +38,8 @@ def main():
         state["handled"] = []
         state["iterations"] = 0
 
-        state = app.invoke(state)
+        config = trace_config(customer_id=customer_id, session_id=session_id, feature="cli")
+        state = app.invoke(state, config=config)
 
         for m in state["messages"][prev_len + 1 :]:
             if m.type == "ai":

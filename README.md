@@ -45,6 +45,8 @@ pip install -r requirements.txt
 
 cp .env.example .env
 # edit .env and set ANTHROPIC_API_KEY
+# optionally also set LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL for
+# tracing (see Observability below) -- the app runs fine without them
 
 python db/seed_data.py     # creates + seeds db/insurance.db
 python rag/ingest.py       # embeds FAQ docs into rag/chroma_store/
@@ -62,6 +64,16 @@ claims). Example prompts:
 - "What's the status of my claim?"
 - "Why did my premium go up and what's happening with my claim?" (multi-intent)
 - "I want to speak to a person" (escalation)
+
+## Observability
+
+Tracing is optional and off by default. Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
+and `LANGFUSE_BASE_URL` in `.env` (get keys from a free [Langfuse Cloud](https://langfuse.com/cloud)
+project, or a self-hosted instance, under Settings > API Keys) and every conversation turn
+across all four UIs is traced to Langfuse: one trace per turn, nested spans per specialist
+call, grouped into Sessions by conversation, tagged by customer and by which UI produced it.
+Emails, phone numbers, and card-ending references are redacted before export. See
+`tracing.py`.
 
 ## Notes on this scaffold
 
