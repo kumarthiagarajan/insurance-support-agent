@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 from graph import build_graph
-from tracing import traced_turn
+from tracing import score_turn, traced_turn
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -44,6 +44,12 @@ class SpecialistReply(BaseModel):
 
 class MessageResponse(BaseModel):
     replies: list[SpecialistReply]
+    trace_id: str | None = None
+
+
+class FeedbackRequest(BaseModel):
+    trace_id: str
+    positive: bool
 
 
 def _new_state(customer_id: str) -> dict:
@@ -90,7 +96,7 @@ def send_message(session_id: str, req: MessageRequest):
         session_id=session_id,
         feature="fastapi",
         user_message=req.message,
-    ) as (root_span, handler):
+    ) as (root_span, handler, trace_id):
         state = _graph.invoke(state, config={"callbacks": [handler]})
         replies = [
             SpecialistReply(speaker=m.name or "assistant", content=m.content)
@@ -100,7 +106,15 @@ def send_message(session_id: str, req: MessageRequest):
         root_span.update(output=[r.model_dump() for r in replies])
 
     _sessions[session_id] = state
-    return MessageResponse(replies=replies)
+    return MessageResponse(replies=replies, trace_id=trace_id)
+
+
+@app.post("/api/session/{session_id}/feedback")
+def send_feedback(session_id: str, req: FeedbackRequest):
+    if session_id not in _sessions:
+        raise HTTPException(status_code=404, detail="Unknown session_id")
+    score_turn(req.trace_id, positive=req.positive)
+    return {"ok": True}
 
 
 if __name__ == "__main__":

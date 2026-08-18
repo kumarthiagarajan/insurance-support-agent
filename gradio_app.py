@@ -12,7 +12,7 @@ import gradio as gr
 from langchain_core.messages import HumanMessage
 
 from graph import build_graph
-from tracing import traced_turn
+from tracing import score_turn, traced_turn
 
 _graph = build_graph()
 
@@ -34,6 +34,7 @@ def start_session(customer_id):
     return (
         new_state(customer_id),
         str(uuid.uuid4()),
+        {},
         [],
         gr.update(visible=False),
         gr.update(visible=True),
@@ -45,6 +46,7 @@ def switch_customer():
     return (
         None,
         None,
+        {},
         [],
         gr.update(visible=True),
         gr.update(visible=False),
@@ -52,10 +54,10 @@ def switch_customer():
     )
 
 
-def respond(message, history, state, session_id):
+def respond(message, history, state, session_id, trace_id_by_index):
     message = (message or "").strip()
     if not message or state is None:
-        return history, state, ""
+        return history, state, "", trace_id_by_index
 
     prev_len = len(state["messages"])
     state["messages"].append(HumanMessage(content=message))
@@ -67,7 +69,7 @@ def respond(message, history, state, session_id):
         session_id=session_id,
         feature="gradio",
         user_message=message,
-    ) as (root_span, handler):
+    ) as (root_span, handler, trace_id):
         state = _graph.invoke(state, config={"callbacks": [handler]})
         new_messages = [m for m in state["messages"][prev_len + 1 :] if m.type == "ai"]
         root_span.update(
@@ -77,18 +79,27 @@ def respond(message, history, state, session_id):
             ]
         )
 
+    trace_id_by_index = dict(trace_id_by_index)
     history = history + [{"role": "user", "content": message}]
     for m in new_messages:
         speaker = getattr(m, "name", None) or "assistant"
         history.append({"role": "assistant", "content": f"**{speaker}**\n\n{m.content}"})
+        trace_id_by_index[len(history) - 1] = trace_id
 
-    return history, state, ""
+    return history, state, "", trace_id_by_index
+
+
+def on_like(trace_id_by_index, evt: gr.LikeData):
+    trace_id = trace_id_by_index.get(evt.index)
+    if trace_id:
+        score_turn(trace_id, positive=bool(evt.liked))
 
 
 with gr.Blocks(title="Insurance Support Assistant") as demo:
     gr.Markdown("## 🛡️ Insurance Support Assistant")
     state = gr.State(None)
     session_id_state = gr.State(None)
+    trace_map_state = gr.State({})
 
     with gr.Column(visible=True) as start_col:
         gr.Markdown("Enter a customer ID to start a conversation (try `CUST001` or `CUST002`).")
@@ -105,15 +116,24 @@ with gr.Blocks(title="Insurance Support Assistant") as demo:
             send_btn = gr.Button("Send", scale=1, variant="primary")
         switch_btn = gr.Button("Switch customer")
 
-    session_outputs = [state, session_id_state, chatbot, start_col, chat_col, customer_label]
+    session_outputs = [
+        state,
+        session_id_state,
+        trace_map_state,
+        chatbot,
+        start_col,
+        chat_col,
+        customer_label,
+    ]
     start_btn.click(start_session, inputs=[customer_input], outputs=session_outputs)
     customer_input.submit(start_session, inputs=[customer_input], outputs=session_outputs)
     switch_btn.click(switch_customer, outputs=session_outputs)
 
-    message_outputs = [chatbot, state, msg_input]
-    respond_inputs = [msg_input, chatbot, state, session_id_state]
+    message_outputs = [chatbot, state, msg_input, trace_map_state]
+    respond_inputs = [msg_input, chatbot, state, session_id_state, trace_map_state]
     send_btn.click(respond, inputs=respond_inputs, outputs=message_outputs)
     msg_input.submit(respond, inputs=respond_inputs, outputs=message_outputs)
+    chatbot.like(on_like, inputs=[trace_map_state])
 
 
 if __name__ == "__main__":

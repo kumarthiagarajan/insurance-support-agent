@@ -39,6 +39,8 @@ Langfuse(mask_otel_spans=_mask_otel_spans)
 
 langfuse = get_client()
 
+THUMBS_SCORE_NAME = "user-thumbs"
+
 
 @contextmanager
 def traced_turn(*, customer_id: str, session_id: str, feature: str, user_message: str):
@@ -52,10 +54,11 @@ def traced_turn(*, customer_id: str, session_id: str, feature: str, user_message
     https://langfuse.com/docs/observability/best-practices#choose-meaningful-input-and-output.
 
     `feature` identifies which UI (cli/streamlit/fastapi/gradio) produced the
-    trace. Yields (root_span, callback_handler); the caller passes
-    callback_handler via config={"callbacks": [...]} and calls
+    trace. Yields (root_span, callback_handler, trace_id); the caller passes
+    callback_handler via config={"callbacks": [...]}, calls
     root_span.update(output=...) with this turn's assistant reply/replies
-    before the `with` block exits.
+    before the `with` block exits, and holds on to trace_id to attach later
+    user feedback via score_turn().
     """
     with langfuse.start_as_current_observation(
         as_type="span", name="support-chat-turn", input=user_message
@@ -69,4 +72,24 @@ def traced_turn(*, customer_id: str, session_id: str, feature: str, user_message
             # Constructed fresh per turn (matches Langfuse's documented pattern) so it
             # binds to *this* turn's active span context rather than whatever context
             # was active at import time.
-            yield root_span, CallbackHandler()
+            yield root_span, CallbackHandler(), langfuse.get_current_trace_id()
+
+
+def score_turn(trace_id: str, *, positive: bool, comment: str | None = None) -> None:
+    """Record explicit thumbs up/down feedback on a previously traced turn.
+
+    Named for the signal source (a thumbs click), not what it's hoped to
+    measure -- see https://langfuse.com/docs/observability/features/user-feedback.
+    Uses a deterministic score_id so a user changing their mind (up -> down)
+    updates the existing score instead of accumulating duplicates.
+    """
+    if not trace_id:
+        return
+    langfuse.create_score(
+        trace_id=trace_id,
+        name=THUMBS_SCORE_NAME,
+        value=1 if positive else 0,
+        data_type="BOOLEAN",
+        score_id=f"{THUMBS_SCORE_NAME}-{trace_id}",
+        comment=comment,
+    )

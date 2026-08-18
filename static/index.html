@@ -136,6 +136,21 @@
   .bubble.ai { background: var(--bubble-ai); color: var(--bubble-ai-text); border-bottom-left-radius: 4px; }
   .bubble.warn { background: var(--warn-bg); color: var(--warn-text); }
 
+  .feedback-row { display: flex; gap: 4px; padding: 0 4px; }
+  .feedback-row button {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .feedback-row button:hover { border-color: var(--accent); }
+  .feedback-row button.selected { border-color: var(--accent); color: var(--accent); }
+  .feedback-row button:disabled { cursor: default; }
+
   #composer {
     display: flex;
     gap: 8px;
@@ -232,6 +247,38 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  function addFeedbackRow(traceId) {
+    if (!traceId) return;
+
+    const row = document.createElement("div");
+    row.className = "feedback-row";
+    const upBtn = document.createElement("button");
+    upBtn.textContent = "👍";
+    const downBtn = document.createElement("button");
+    downBtn.textContent = "👎";
+
+    const sendFeedback = async (positive) => {
+      upBtn.disabled = downBtn.disabled = true;
+      (positive ? upBtn : downBtn).classList.add("selected");
+      try {
+        await fetch(`/api/session/${sessionId}/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trace_id: traceId, positive }),
+        });
+      } catch (err) {
+        // Feedback is best-effort; a failed request shouldn't disrupt the chat.
+      }
+    };
+
+    upBtn.onclick = () => sendFeedback(true);
+    downBtn.onclick = () => sendFeedback(false);
+    row.appendChild(upBtn);
+    row.appendChild(downBtn);
+    messagesEl.appendChild(row);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
   function setBusy(busy) {
     sendBtn.disabled = busy;
     messageInput.disabled = busy;
@@ -304,6 +351,7 @@
       for (const reply of data.replies) {
         addBubble("ai", reply.content, reply.speaker);
       }
+      addFeedbackRow(data.trace_id);
     } catch (err) {
       addBubble("ai", "Network error: " + err.message, "system");
     } finally {

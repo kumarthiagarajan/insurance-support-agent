@@ -91,17 +91,27 @@ rather than ending the turn, so the graph iterates until the Supervisor is satis
   instantiated once per agent module at import time (`_llm` / `_llm | _router` module
   globals), not per-request.
 - **`tracing.py`** — optional Langfuse tracing (see [Langfuse LangChain/LangGraph
-  docs](https://langfuse.com/integrations/frameworks/langchain)). Builds a process-wide
-  `CallbackHandler` (with a `mask_otel_spans` hook that redacts emails/phones/card suffixes
-  before export) and a `trace_config(customer_id, session_id, feature)` helper that each of
-  the four entry points (`main.py`, `app.py`, `server.py`, `gradio_app.py`) passes as
-  `config=` to their `graph.invoke()` call, so one user turn = one trace, tagged by
-  `customer_id` (Langfuse `user_id`), a per-conversation `session_id` (groups a
-  conversation's turns in the Sessions view), and a `feature` tag identifying which UI
-  produced it (`cli`/`streamlit`/`fastapi`/`gradio`). Import `tracing` only after
-  `load_dotenv()` has run (Langfuse reads its env vars at client-construction time). With no
-  `LANGFUSE_*` env vars set, the client stays disabled and every call above is a no-op --
-  tracing never blocks or breaks the app.
+  docs](https://langfuse.com/integrations/frameworks/langchain)). `traced_turn(customer_id,
+  session_id, feature, user_message)` is a context manager each of the four entry points
+  (`main.py`, `app.py`, `server.py`, `gradio_app.py`) wraps around its `graph.invoke()` call;
+  it yields `(root_span, callback_handler, trace_id)` -- pass `callback_handler` via
+  `config={"callbacks": [...]}`, call `root_span.update(output=...)` with the turn's
+  specialist reply/replies before the `with` block exits (this keeps the trace's input/output
+  to just the user message and reply, not the raw `AgentState` dict `graph.invoke()` actually
+  sees -- see [best practices](https://langfuse.com/docs/observability/best-practices)), and
+  hold on to `trace_id` for feedback. One user turn = one trace, tagged by `customer_id`
+  (Langfuse `user_id`), a per-conversation `session_id` (groups a conversation's turns in the
+  Sessions view), and a `feature` tag identifying which UI produced it
+  (`cli`/`streamlit`/`fastapi`/`gradio`). A `mask_otel_spans` hook redacts emails/phones/card
+  suffixes before export. `score_turn(trace_id, positive=bool)` records thumbs up/down
+  feedback as a `user-thumbs` BOOLEAN score on that trace (deterministic `score_id` so
+  changing your vote updates the same score rather than duplicating it) -- wired into all
+  four UIs (CLI: `/good`/`/bad` after a reply; Streamlit: `st.feedback`; Gradio:
+  `gr.Chatbot.like()`; FastAPI: thumbs buttons in `static/index.html` calling
+  `POST /api/session/{id}/feedback`). Import `tracing` only after `load_dotenv()` has run
+  (Langfuse reads its env vars at client-construction time). With no `LANGFUSE_*` env vars
+  set, the client stays disabled and every call above is a no-op -- tracing never blocks or
+  breaks the app.
 
 ### Adding a new specialist
 
