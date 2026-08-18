@@ -91,9 +91,18 @@ for (human_message, ai_messages), trace_id in zip(
     for ai_message in ai_messages:
         render_ai_message(ai_message)
 
-    feedback = st.feedback("thumbs", key=f"feedback-{trace_id}")
+    feedback_col, comment_col = st.columns([1, 4])
+    with feedback_col:
+        feedback = st.feedback("thumbs", key=f"feedback-{trace_id}")
+    with comment_col:
+        comment = st.text_input(
+            "Comment",
+            key=f"comment-{trace_id}",
+            placeholder="Add a comment (optional)",
+            label_visibility="collapsed",
+        )
     if feedback is not None:
-        score_turn(trace_id, positive=feedback == 1)
+        score_turn(trace_id, positive=feedback == 1, comment=comment.strip() or None)
 
 user_input = st.chat_input("Type your message...")
 if user_input:

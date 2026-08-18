@@ -75,10 +75,11 @@ call, grouped into Sessions by conversation, tagged by customer and by which UI 
 Emails, phone numbers, and card-ending references are redacted before export. See
 `tracing.py`.
 
-Each turn can be rated thumbs up/down, recorded as a `user-thumbs` score on its trace: type
-`/good` or `/bad` after a reply in the CLI, click the thumbs widget below a reply in the
-Streamlit UI, use the like/dislike icons on a message in the Gradio UI, or use the 👍/👎
-buttons in the FastAPI + static HTML UI.
+Each turn can be rated thumbs up/down, with an optional comment, recorded as a `user-thumbs`
+score on its trace: in the CLI, type `/good` or `/bad` (optionally followed by a comment, e.g.
+`/bad missed the deductible question`); in Streamlit, use the thumbs widget and comment box
+below a reply; in Gradio, use the like/dislike icons on a message, then the comment box that
+appears; in the FastAPI + static HTML UI, use the 👍/👎 buttons and comment field together.
 
 ## Notes on this scaffold
 

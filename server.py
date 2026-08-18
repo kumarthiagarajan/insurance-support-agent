@@ -50,6 +50,7 @@ class MessageResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     trace_id: str
     positive: bool
+    comment: str | None = None
 
 
 def _new_state(customer_id: str) -> dict:
@@ -113,7 +114,7 @@ def send_message(session_id: str, req: MessageRequest):
 def send_feedback(session_id: str, req: FeedbackRequest):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail="Unknown session_id")
-    score_turn(req.trace_id, positive=req.positive)
+    score_turn(req.trace_id, positive=req.positive, comment=(req.comment or "").strip() or None)
     return {"ok": True}
 
 

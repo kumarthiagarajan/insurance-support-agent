@@ -17,7 +17,8 @@ from tracing import langfuse, score_turn, traced_turn
 def main():
     app = build_graph()
     print("Insurance Support Assistant (type 'quit' to exit)")
-    print("After a reply, type /good or /bad to rate it.\n")
+    print("After a reply, type /good or /bad to rate it, optionally followed by a comment")
+    print("(e.g. '/bad missed the deductible question').\n")
     customer_id = input("Customer ID (try CUST001, CUST002): ").strip() or "CUST001"
     session_id = str(uuid.uuid4())
 
@@ -35,11 +36,16 @@ def main():
         if user_input.lower() in {"quit", "exit"}:
             break
 
-        if user_input.lower() in {"/good", "/bad"}:
+        command, _, comment = user_input.partition(" ")
+        if command.lower() in {"/good", "/bad"}:
             if last_trace_id is None:
                 print("No reply to rate yet.")
             else:
-                score_turn(last_trace_id, positive=user_input.lower() == "/good")
+                score_turn(
+                    last_trace_id,
+                    positive=command.lower() == "/good",
+                    comment=comment.strip() or None,
+                )
                 print("Thanks for the feedback!")
             continue
 

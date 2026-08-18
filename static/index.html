@@ -150,6 +150,16 @@
   .feedback-row button:hover { border-color: var(--accent); }
   .feedback-row button.selected { border-color: var(--accent); color: var(--accent); }
   .feedback-row button:disabled { cursor: default; }
+  .feedback-row input.feedback-comment {
+    flex: 1;
+    max-width: 260px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+  }
 
   #composer {
     display: flex;
@@ -256,15 +266,25 @@
     upBtn.textContent = "👍";
     const downBtn = document.createElement("button");
     downBtn.textContent = "👎";
+    const commentInput = document.createElement("input");
+    commentInput.type = "text";
+    commentInput.placeholder = "Add a comment (optional)";
+    commentInput.className = "feedback-comment";
 
+    // Comment travels with whichever rating was clicked most recently -- re-clicking
+    // a thumb (e.g. after typing a comment) updates the same score, it doesn't duplicate.
     const sendFeedback = async (positive) => {
-      upBtn.disabled = downBtn.disabled = true;
-      (positive ? upBtn : downBtn).classList.add("selected");
+      upBtn.classList.toggle("selected", positive);
+      downBtn.classList.toggle("selected", !positive);
       try {
         await fetch(`/api/session/${sessionId}/feedback`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trace_id: traceId, positive }),
+          body: JSON.stringify({
+            trace_id: traceId,
+            positive,
+            comment: commentInput.value.trim() || null,
+          }),
         });
       } catch (err) {
         // Feedback is best-effort; a failed request shouldn't disrupt the chat.
@@ -275,6 +295,7 @@
     downBtn.onclick = () => sendFeedback(false);
     row.appendChild(upBtn);
     row.appendChild(downBtn);
+    row.appendChild(commentInput);
     messagesEl.appendChild(row);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }

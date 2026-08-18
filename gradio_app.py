@@ -35,10 +35,13 @@ def start_session(customer_id):
         new_state(customer_id),
         str(uuid.uuid4()),
         {},
+        None,
         [],
         gr.update(visible=False),
         gr.update(visible=True),
         f"Customer: **{customer_id}**",
+        gr.update(value="", visible=False),
+        gr.update(visible=False),
     )
 
 
@@ -47,10 +50,13 @@ def switch_customer():
         None,
         None,
         {},
+        None,
         [],
         gr.update(visible=True),
         gr.update(visible=False),
         "",
+        gr.update(value="", visible=False),
+        gr.update(visible=False),
     )
 
 
@@ -91,8 +97,23 @@ def respond(message, history, state, session_id, trace_id_by_index):
 
 def on_like(trace_id_by_index, evt: gr.LikeData):
     trace_id = trace_id_by_index.get(evt.index)
-    if trace_id:
-        score_turn(trace_id, positive=bool(evt.liked))
+    if not trace_id:
+        return gr.update(), gr.update(), gr.update()
+    positive = bool(evt.liked)
+    score_turn(trace_id, positive=positive)
+    placeholder = f"Rated {'👍' if positive else '👎'} -- add an optional comment"
+    return (
+        {"trace_id": trace_id, "positive": positive},
+        gr.update(value="", placeholder=placeholder, visible=True),
+        gr.update(visible=True),
+    )
+
+
+def submit_comment(last_feedback, comment):
+    comment = (comment or "").strip()
+    if last_feedback and comment:
+        score_turn(last_feedback["trace_id"], positive=last_feedback["positive"], comment=comment)
+    return ""
 
 
 with gr.Blocks(title="Insurance Support Assistant") as demo:
@@ -100,6 +121,7 @@ with gr.Blocks(title="Insurance Support Assistant") as demo:
     state = gr.State(None)
     session_id_state = gr.State(None)
     trace_map_state = gr.State({})
+    last_feedback_state = gr.State(None)
 
     with gr.Column(visible=True) as start_col:
         gr.Markdown("Enter a customer ID to start a conversation (try `CUST001` or `CUST002`).")
@@ -114,16 +136,24 @@ with gr.Blocks(title="Insurance Support Assistant") as demo:
                 placeholder="Type your message...", scale=8, show_label=False
             )
             send_btn = gr.Button("Send", scale=1, variant="primary")
+        with gr.Row():
+            comment_input = gr.Textbox(
+                placeholder="Add a comment (optional)", scale=8, show_label=False, visible=False
+            )
+            comment_btn = gr.Button("Submit comment", scale=1, visible=False)
         switch_btn = gr.Button("Switch customer")
 
     session_outputs = [
         state,
         session_id_state,
         trace_map_state,
+        last_feedback_state,
         chatbot,
         start_col,
         chat_col,
         customer_label,
+        comment_input,
+        comment_btn,
     ]
     start_btn.click(start_session, inputs=[customer_input], outputs=session_outputs)
     customer_input.submit(start_session, inputs=[customer_input], outputs=session_outputs)
@@ -133,7 +163,18 @@ with gr.Blocks(title="Insurance Support Assistant") as demo:
     respond_inputs = [msg_input, chatbot, state, session_id_state, trace_map_state]
     send_btn.click(respond, inputs=respond_inputs, outputs=message_outputs)
     msg_input.submit(respond, inputs=respond_inputs, outputs=message_outputs)
-    chatbot.like(on_like, inputs=[trace_map_state])
+    chatbot.like(
+        on_like,
+        inputs=[trace_map_state],
+        outputs=[last_feedback_state, comment_input, comment_btn],
+    )
+
+    comment_btn.click(
+        submit_comment, inputs=[last_feedback_state, comment_input], outputs=[comment_input]
+    )
+    comment_input.submit(
+        submit_comment, inputs=[last_feedback_state, comment_input], outputs=[comment_input]
+    )
 
 
 if __name__ == "__main__":

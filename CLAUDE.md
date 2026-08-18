@@ -103,12 +103,16 @@ rather than ending the turn, so the graph iterates until the Supervisor is satis
   (Langfuse `user_id`), a per-conversation `session_id` (groups a conversation's turns in the
   Sessions view), and a `feature` tag identifying which UI produced it
   (`cli`/`streamlit`/`fastapi`/`gradio`). A `mask_otel_spans` hook redacts emails/phones/card
-  suffixes before export. `score_turn(trace_id, positive=bool)` records thumbs up/down
-  feedback as a `user-thumbs` BOOLEAN score on that trace (deterministic `score_id` so
-  changing your vote updates the same score rather than duplicating it) -- wired into all
-  four UIs (CLI: `/good`/`/bad` after a reply; Streamlit: `st.feedback`; Gradio:
-  `gr.Chatbot.like()`; FastAPI: thumbs buttons in `static/index.html` calling
-  `POST /api/session/{id}/feedback`). Import `tracing` only after `load_dotenv()` has run
+  suffixes before export. `score_turn(trace_id, positive=bool, comment=str|None)` records
+  thumbs up/down feedback (with an optional free-text comment) as a `user-thumbs` BOOLEAN
+  score on that trace (deterministic `score_id` so changing your vote, or adding a comment
+  after the fact, updates the same score rather than duplicating it) -- wired into all four
+  UIs: CLI (`/good`/`/bad`, optionally followed by a comment on the same line); Streamlit
+  (`st.feedback` thumbs widget next to a `st.text_input` comment box); Gradio
+  (`gr.Chatbot.like()`, plus a "submit comment" box that appears after a rating, applying to
+  whichever message was most recently rated); FastAPI (thumbs buttons + a comment `<input>`
+  in `static/index.html`, both sent together to `POST /api/session/{id}/feedback`). Import
+  `tracing` only after `load_dotenv()` has run
   (Langfuse reads its env vars at client-construction time). With no `LANGFUSE_*` env vars
   set, the client stays disabled and every call above is a no-op -- tracing never blocks or
   breaks the app.
