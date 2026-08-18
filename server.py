@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 from graph import build_graph
-from tracing import trace_config
+from tracing import traced_turn
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -85,20 +85,21 @@ def send_message(session_id: str, req: MessageRequest):
     state["handled"] = []
     state["iterations"] = 0
 
-    config = trace_config(
-        customer_id=state["customer_id"], session_id=session_id, feature="fastapi"
-    )
-    state = _graph.invoke(state, config=config)
-    _sessions[session_id] = state
+    with traced_turn(
+        customer_id=state["customer_id"],
+        session_id=session_id,
+        feature="fastapi",
+        user_message=req.message,
+    ) as (root_span, handler):
+        state = _graph.invoke(state, config={"callbacks": [handler]})
+        replies = [
+            SpecialistReply(speaker=m.name or "assistant", content=m.content)
+            for m in state["messages"][prev_len + 1 :]
+            if m.type == "ai"
+        ]
+        root_span.update(output=[r.model_dump() for r in replies])
 
-    replies = [
-        SpecialistReply(
-            speaker=getattr(m, "name", None) or "assistant",
-            content=m.content,
-        )
-        for m in state["messages"][prev_len + 1 :]
-        if m.type == "ai"
-    ]
+    _sessions[session_id] = state
     return MessageResponse(replies=replies)
 
 

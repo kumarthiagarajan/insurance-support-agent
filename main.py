@@ -11,7 +11,7 @@ if not os.getenv("ANTHROPIC_API_KEY"):
 from langchain_core.messages import HumanMessage
 
 from graph import build_graph
-from tracing import trace_config
+from tracing import langfuse, traced_turn
 
 
 def main():
@@ -38,13 +38,23 @@ def main():
         state["handled"] = []
         state["iterations"] = 0
 
-        config = trace_config(customer_id=customer_id, session_id=session_id, feature="cli")
-        state = app.invoke(state, config=config)
+        with traced_turn(
+            customer_id=customer_id, session_id=session_id, feature="cli", user_message=user_input
+        ) as (root_span, handler):
+            state = app.invoke(state, config={"callbacks": [handler]})
+            replies = [
+                {"role": "assistant", "name": m.name, "content": m.content}
+                for m in state["messages"][prev_len + 1 :]
+                if m.type == "ai"
+            ]
+            root_span.update(output=replies)
 
-        for m in state["messages"][prev_len + 1 :]:
-            if m.type == "ai":
-                speaker = getattr(m, "name", None) or "assistant"
-                print(f"\n[{speaker}] {m.content}")
+        for reply in replies:
+            print(f"\n[{reply['name'] or 'assistant'}] {reply['content']}")
+
+    # main.py is a short-lived process -- flush the background queue before exit so
+    # the last turn's trace isn't lost (see Langfuse's queuing/flushing docs).
+    langfuse.shutdown()
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ import gradio as gr
 from langchain_core.messages import HumanMessage
 
 from graph import build_graph
-from tracing import trace_config
+from tracing import traced_turn
 
 _graph = build_graph()
 
@@ -61,16 +61,26 @@ def respond(message, history, state, session_id):
     state["messages"].append(HumanMessage(content=message))
     state["handled"] = []
     state["iterations"] = 0
-    config = trace_config(
-        customer_id=state["customer_id"], session_id=session_id, feature="gradio"
-    )
-    state = _graph.invoke(state, config=config)
+
+    with traced_turn(
+        customer_id=state["customer_id"],
+        session_id=session_id,
+        feature="gradio",
+        user_message=message,
+    ) as (root_span, handler):
+        state = _graph.invoke(state, config={"callbacks": [handler]})
+        new_messages = [m for m in state["messages"][prev_len + 1 :] if m.type == "ai"]
+        root_span.update(
+            output=[
+                {"role": "assistant", "name": m.name, "content": m.content}
+                for m in new_messages
+            ]
+        )
 
     history = history + [{"role": "user", "content": message}]
-    for m in state["messages"][prev_len + 1 :]:
-        if m.type == "ai":
-            speaker = getattr(m, "name", None) or "assistant"
-            history.append({"role": "assistant", "content": f"**{speaker}**\n\n{m.content}"})
+    for m in new_messages:
+        speaker = getattr(m, "name", None) or "assistant"
+        history.append({"role": "assistant", "content": f"**{speaker}**\n\n{m.content}"})
 
     return history, state, ""
 

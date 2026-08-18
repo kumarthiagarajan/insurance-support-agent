@@ -1,6 +1,7 @@
 import re
+from contextlib import contextmanager
 
-from langfuse import Langfuse
+from langfuse import Langfuse, get_client, propagate_attributes
 from langfuse.langchain import CallbackHandler
 from langfuse.types import MaskOtelSpansParams, MaskOtelSpansResult, OtelSpanPatch
 
@@ -30,25 +31,42 @@ def _mask_otel_spans(*, params: MaskOtelSpansParams) -> MaskOtelSpansResult | No
     return MaskOtelSpansResult(span_patches=patches) if patches else None
 
 
-# Configures the process-wide Langfuse singleton (later get_client()/CallbackHandler()
-# calls reuse it) with masking enabled before any tracing happens. Fails open: with no
-# LANGFUSE_* env vars set, this logs a warning and the client stays disabled rather than
-# raising, so tracing never blocks the app's core support-chat behavior.
+# Configures the process-wide Langfuse singleton (later get_client() calls reuse it) with
+# masking enabled before any tracing happens. Fails open: with no LANGFUSE_* env vars set,
+# this logs a warning and the client stays disabled rather than raising, so tracing never
+# blocks the app's core support-chat behavior.
 Langfuse(mask_otel_spans=_mask_otel_spans)
 
-langfuse_handler = CallbackHandler()
+langfuse = get_client()
 
 
-def trace_config(*, customer_id: str, session_id: str, feature: str) -> dict:
-    """LangGraph invoke() config that attaches Langfuse tracing and trace
-    attributes for one conversation turn. `feature` identifies which UI
-    (cli/streamlit/fastapi/gradio) produced the trace."""
-    return {
-        "callbacks": [langfuse_handler],
-        "metadata": {
-            "langfuse_session_id": session_id,
-            "langfuse_user_id": customer_id,
-            "langfuse_tags": [feature],
-            "langfuse_trace_name": "support-chat-turn",
-        },
-    }
+@contextmanager
+def traced_turn(*, customer_id: str, session_id: str, feature: str, user_message: str):
+    """Wrap one graph.invoke() call as a single Langfuse trace.
+
+    Explicitly setting input/output on the root span (rather than letting the
+    CallbackHandler's own LangChain run be the root) is what keeps the trace's
+    input/output to the user message and assistant reply, instead of the raw
+    AgentState dict (internal routing fields, full message history) that
+    graph.invoke() actually receives and returns -- see
+    https://langfuse.com/docs/observability/best-practices#choose-meaningful-input-and-output.
+
+    `feature` identifies which UI (cli/streamlit/fastapi/gradio) produced the
+    trace. Yields (root_span, callback_handler); the caller passes
+    callback_handler via config={"callbacks": [...]} and calls
+    root_span.update(output=...) with this turn's assistant reply/replies
+    before the `with` block exits.
+    """
+    with langfuse.start_as_current_observation(
+        as_type="span", name="support-chat-turn", input=user_message
+    ) as root_span:
+        with propagate_attributes(
+            user_id=customer_id,
+            session_id=session_id,
+            tags=[feature],
+            trace_name="support-chat-turn",
+        ):
+            # Constructed fresh per turn (matches Langfuse's documented pattern) so it
+            # binds to *this* turn's active span context rather than whatever context
+            # was active at import time.
+            yield root_span, CallbackHandler()

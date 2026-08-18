@@ -13,7 +13,7 @@ if not os.getenv("ANTHROPIC_API_KEY"):
 from langchain_core.messages import HumanMessage
 
 from graph import build_graph
-from tracing import trace_config
+from tracing import traced_turn
 
 st.set_page_config(page_title="Insurance Support Assistant", page_icon="🛡️")
 
@@ -85,15 +85,22 @@ if user_input:
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    config = trace_config(
-        customer_id=st.session_state.customer_id,
-        session_id=st.session_state.session_id,
-        feature="streamlit",
-    )
     with st.spinner("Thinking..."):
-        state = app.invoke(state, config=config)
+        with traced_turn(
+            customer_id=st.session_state.customer_id,
+            session_id=st.session_state.session_id,
+            feature="streamlit",
+            user_message=user_input,
+        ) as (root_span, handler):
+            state = app.invoke(state, config={"callbacks": [handler]})
+            new_messages = [m for m in state["messages"][prev_len + 1 :] if m.type == "ai"]
+            root_span.update(
+                output=[
+                    {"role": "assistant", "name": m.name, "content": m.content}
+                    for m in new_messages
+                ]
+            )
     st.session_state.state = state
 
-    for message in state["messages"][prev_len + 1 :]:
-        if message.type == "ai":
-            render_ai_message(message)
+    for message in new_messages:
+        render_ai_message(message)
