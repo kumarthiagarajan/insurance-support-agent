@@ -17,10 +17,6 @@ from pydantic import BaseModel
 from graph import build_graph
 
 STATIC_DIR = Path(__file__).parent / "static"
-NO_REPLY_FALLBACK = (
-    "No response was returned for this step. Please try rephrasing your question, "
-    "or ask to speak with a representative."
-)
 
 app = FastAPI(title="Insurance Support Agent API")
 _graph = build_graph()
@@ -94,7 +90,7 @@ def send_message(session_id: str, req: MessageRequest):
     replies = [
         SpecialistReply(
             speaker=getattr(m, "name", None) or "assistant",
-            content=m.content or NO_REPLY_FALLBACK,
+            content=m.content,
         )
         for m in state["messages"][prev_len + 1 :]
         if m.type == "ai"

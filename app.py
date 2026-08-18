@@ -35,13 +35,7 @@ def render_ai_message(message):
     speaker = getattr(message, "name", None) or "assistant"
     with st.chat_message("assistant"):
         st.markdown(f"**{speaker}**")
-        if message.content:
-            st.markdown(message.content)
-        else:
-            st.warning(
-                "No response was returned for this step. Please try rephrasing your "
-                "question, or ask to speak with a representative."
-            )
+        st.markdown(message.content)
 
 
 app = get_app()

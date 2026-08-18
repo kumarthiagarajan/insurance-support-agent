@@ -13,10 +13,6 @@ from langchain_core.messages import HumanMessage
 from graph import build_graph
 
 _graph = build_graph()
-NO_REPLY_FALLBACK = (
-    "No response was returned for this step. Please try rephrasing your question, "
-    "or ask to speak with a representative."
-)
 
 
 def new_state(customer_id: str) -> dict:
@@ -67,8 +63,7 @@ def respond(message, history, state):
     for m in state["messages"][prev_len + 1 :]:
         if m.type == "ai":
             speaker = getattr(m, "name", None) or "assistant"
-            content = m.content or NO_REPLY_FALLBACK
-            history.append({"role": "assistant", "content": f"**{speaker}**\n\n{content}"})
+            history.append({"role": "assistant", "content": f"**{speaker}**\n\n{m.content}"})
 
     return history, state, ""
 

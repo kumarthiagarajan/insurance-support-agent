@@ -27,6 +27,18 @@ def _label_colleague_turns(messages: list, current_name: str) -> list:
     return labeled
 
 
+# The Anthropic API can return an empty content list with stop_reason="refusal"
+# when its own safety classifier blocks a request server-side -- independent of
+# anything wrong with the prompt or the customer's data. Without this, an empty
+# AIMessage renders as a blank reply with no explanation to the customer.
+REFUSED_FALLBACK = (
+    "I wasn't able to process that request. This can happen when a message trips "
+    "an automatic content check on our end -- it isn't a reflection of anything "
+    "you did. Please try rephrasing your question, or ask to speak with a "
+    "representative."
+)
+
+
 def run_grounded_agent(llm, system_prompt: str, messages: list, name: str) -> AIMessage:
     # When a prior specialist already replied this turn, `messages` ends on an
     # AIMessage. Claude rejects a request whose conversation ends on an
@@ -37,7 +49,7 @@ def run_grounded_agent(llm, system_prompt: str, messages: list, name: str) -> AI
         HumanMessage(content="Please respond to the customer's request above.")
     )
     response = llm.invoke(full_messages)
-    return AIMessage(content=response.content, name=name)
+    return AIMessage(content=response.content or REFUSED_FALLBACK, name=name)
 
 
 def last_human_message(messages: list) -> str:
